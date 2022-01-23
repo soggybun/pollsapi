@@ -1,14 +1,16 @@
 from datetime import datetime
 
-from .models import Poll, Question, Answer
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, AnonymousUser
+from django.utils import timezone
 from django.http import Http404
+
 from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework import permissions
 
+from .models import Poll, Question, Answer
 from .serializers import PollSerializer, QuestionSerializer, ChoiceSerializer, UserSerializer, AnswerSerializer
 from .permissions import IsOwnerOrReadOnly
 
@@ -46,6 +48,25 @@ class PollDetail(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly,
                           IsOwnerOrReadOnly]
 
+    @staticmethod
+    def validate_poll_request(user: User, poll_id: int):
+        if isinstance(user, AnonymousUser):
+            return None, status.HTTP_401_UNAUTHORIZED
+
+        try:
+            poll = Poll.objects.get(pk=poll_id)
+        except Poll.DoesNotExist:
+            raise Http404
+
+        if poll.dt_close < timezone.now() and not user.is_staff:
+            return None, status.HTTP_403_FORBIDDEN
+
+        return poll, status.HTTP_200_OK
+
+    def retrieve(self, request, *args, **kwargs):
+        poll, status_code = self.validate_poll_request(request.user, kwargs.get('pk'))
+        return Response(data=PollSerializer(poll).data, status=status_code)
+
     def perform_create(self, serializer):
         if self.request.user.is_staff:
             serializer.save(owner=self.request.user)
@@ -55,15 +76,11 @@ class PollQuestionList(APIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly,
                           IsOwnerOrReadOnly]
 
-    @staticmethod
-    def get_poll(poll_id):
-        try:
-            return Poll.objects.get(pk=poll_id)
-        except (Poll.DoesNotExist, Question.DoesNotExist):
-            raise Http404
-
     def get(self, request, poll_id):
-        poll = self.get_poll(poll_id)
+        poll, status_code = PollDetail.validate_poll_request(request.user, poll_id)
+        if not poll:
+            return Response(data=PollSerializer(poll).data, status=status_code)
+
         serializer = QuestionSerializer(poll.questions, many=True)
         return Response(serializer.data)
 
@@ -82,15 +99,18 @@ class PollQuestionDetail(APIView):
                           IsOwnerOrReadOnly]
 
     @staticmethod
-    def get_question(poll_id: int, question_number: int):
+    def get_question(poll, question_number: int):
         try:
-            poll = Poll.objects.get(pk=poll_id)
             return poll.questions.all()[question_number - 1]
-        except (Poll.DoesNotExist, IndexError):
+        except IndexError:
             raise Http404
 
     def get(self, request, poll_id, question_number):
-        question = self.get_question(poll_id, question_number)
+        poll, status_code = PollDetail.validate_poll_request(request.user, poll_id)
+        if not poll:
+            return Response(data=PollSerializer(poll).data, status=status_code)
+
+        question = self.get_question(poll, question_number)
         serializer = QuestionSerializer(question)
         return Response(serializer.data)
 
@@ -117,7 +137,11 @@ class QuestionChoiceList(APIView):
                           IsOwnerOrReadOnly]
 
     def get(self, request, poll_id, question_number):
-        question = PollQuestionDetail.get_question(poll_id, question_number)
+        poll, status_code = PollDetail.validate_poll_request(request.user, poll_id)
+        if not poll:
+            return Response(data=poll, status=status_code)
+
+        question = PollQuestionDetail.get_question(poll, question_number)
         serializer = ChoiceSerializer(question.choices, many=True)
         return Response(data=serializer.data)
 
@@ -136,16 +160,20 @@ class QuestionChoiceDetail(APIView):
                           IsOwnerOrReadOnly]
 
     @staticmethod
-    def get_choice(poll_id: int, question_number: int, choice_number):
+    def get_choice(poll: Poll(), question_number: int, choice_number):
         try:
-            question = PollQuestionDetail.get_question(poll_id, question_number)
+            question = PollQuestionDetail.get_question(poll, question_number)
             return question.choices.all()[choice_number - 1]
         except IndexError:
             return Http404
 
     def get(self, request, poll_id, question_number, choice_number):
-        question = self.get_choice(poll_id, question_number, choice_number)
-        serializer = ChoiceSerializer(question)
+        poll, status_code = PollDetail.validate_poll_request(request.user, poll_id)
+        if not poll:
+            return Response(data=poll, status=status_code)
+
+        choice = self.get_choice(poll_id, question_number, choice_number)
+        serializer = ChoiceSerializer(choice)
         return Response(serializer.data)
 
     def delete(self, request, poll_id, question_number, choice_number):
@@ -168,7 +196,8 @@ class QuestionChoiceDetail(APIView):
 class AnswerDetail(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def choices_valid(self, actual: Question, submitted):
+    @staticmethod
+    def choices_valid(actual: Question, submitted):
         actual = set([str(c['id']) for c in actual.choices.values()])
         submitted = set(submitted.data.get('data').keys())
         return len(submitted.symmetric_difference(actual)) == 0
@@ -196,5 +225,5 @@ class AnswerList(APIView):
             serializer = AnswerSerializer(user_answers, many=True)
             return Response(data=serializer.data)
         except Answer.DoesNotExist:
-            return Response(data={"Reason": "No data for this user."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(data={"detail": "No data found for this user."}, status=status.HTTP_400_BAD_REQUEST)
 
