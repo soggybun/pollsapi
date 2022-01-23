@@ -11,6 +11,8 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 """
 
 import os
+
+from corsheaders.defaults import default_methods, default_headers
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -32,13 +34,13 @@ DEBUG = bool(os.getenv('DEBUG'))
 
 ALLOWED_HOSTS = ['*']
 
-CORS_ALLOWED_ORIGIN_REGEXES = [
+CORS_ALLOWED_ORIGIN_REGEXES = ['*']
 
-]
+SECURE_SSL_REDIRECT = True
 
-# CORS_ALLOW_METHODS = list(default_methods)
-#
-# CORS_ALLOW_HEADERS = list(default_headers)
+CORS_ALLOW_METHODS = list(default_methods)
+
+CORS_ALLOW_HEADERS = list(default_headers)
 
 # Application definition
 
