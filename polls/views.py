@@ -16,11 +16,15 @@ from .permissions import IsOwnerOrReadOnly
 
 
 class UserList(generics.ListAPIView):
+    permission_classes = [permissions.IsAdminUser,
+                          IsOwnerOrReadOnly]
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
 
 class UserDetail(generics.RetrieveAPIView):
+    permission_classes = [permissions.IsAdminUser,
+                          IsOwnerOrReadOnly]
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
@@ -199,8 +203,9 @@ class AnswerDetail(APIView):
     @staticmethod
     def choices_valid(actual: Question, submitted):
         actual = set([str(c['id']) for c in actual.choices.values()])
+        print(actual)
         submitted = set(submitted.data.get('data').keys())
-        return len(submitted.symmetric_difference(actual)) == 0
+        return len(submitted.difference(actual)) == 0
 
     def post(self, request, question_id):
         question = Question.objects.get(pk=question_id)
@@ -211,7 +216,7 @@ class AnswerDetail(APIView):
         serializer = AnswerSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(question=question, user=request.user,
-                            is_anon=bool(request.data.get('is_anon')), poll_id=question.poll_id)
+                            is_anon=bool(request.data.get('is_anon')))
         return Response(status=status.HTTP_200_OK)
 
 

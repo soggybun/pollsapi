@@ -93,16 +93,13 @@ class UserSerializer(serializers.ModelSerializer):
 
 class AnswerSerializer(serializers.ModelSerializer):
     question_id = serializers.ReadOnlyField(source='question.id')
-    poll_id = serializers.SerializerMethodField()
+    poll_id = serializers.ReadOnlyField(source='question.poll_id')
     user_id = serializers.ReadOnlyField(source='user.id')
     user_name = serializers.ReadOnlyField(source='user.name')
 
     class Meta:
         model = Answer
         fields = ['id', 'question_id', 'data', 'poll_id', 'user_id', 'user_name']
-
-    def get_poll_id(self, answer):
-        return answer.question.poll_id
 
     def create(self, validated_data):
         is_anon = bool(validated_data.pop('is_anon'))

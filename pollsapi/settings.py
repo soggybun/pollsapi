@@ -15,6 +15,8 @@ import os
 from corsheaders.defaults import default_methods, default_headers
 from dotenv import load_dotenv
 
+"""Create .env file before starting an application"""
+
 load_dotenv()
 
 # from corsheaders.defaults import default_methods
@@ -36,7 +38,7 @@ ALLOWED_HOSTS = ['*']
 
 CORS_ALLOWED_ORIGIN_REGEXES = ['*']
 
-SECURE_SSL_REDIRECT = True
+SECURE_SSL_REDIRECT = False
 
 CORS_ALLOW_METHODS = list(default_methods)
 
