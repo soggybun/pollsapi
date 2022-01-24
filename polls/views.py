@@ -152,8 +152,12 @@ class QuestionChoiceList(APIView):
     @staticmethod
     def post(request, poll_id, question_number):
         serializer = ChoiceSerializer(data=request.data)
+        poll, status_code = PollDetail.validate_poll_request(request.user, poll_id)
+        if not poll:
+            return Response(data=PollSerializer(poll).data, status=status_code)
+
         if serializer.is_valid():
-            serializer.validated_data['question_id'] = PollQuestionDetail.get_question(poll_id, question_number).id
+            serializer.validated_data['question_id'] = PollQuestionDetail.get_question(poll, question_number).id
             serializer.save(owner=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -200,15 +204,20 @@ class QuestionChoiceDetail(APIView):
 class AnswerDetail(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_question(self, question_id):
+        try:
+            return Question.objects.get(pk=question_id)
+        except Question.DoesNotExist:
+            raise Http404
+
     @staticmethod
     def choices_valid(actual: Question, submitted):
         actual = set([str(c['id']) for c in actual.choices.values()])
-        print(actual)
         submitted = set(submitted.data.get('data').keys())
         return len(submitted.difference(actual)) == 0
 
     def post(self, request, question_id):
-        question = Question.objects.get(pk=question_id)
+        question = self.get_question(question_id)
 
         if not self.choices_valid(question, request):
             return Response(status=status.HTTP_400_BAD_REQUEST)

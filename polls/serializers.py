@@ -57,7 +57,7 @@ class QuestionSerializer(serializers.ModelSerializer):
 
 
 class PollSerializer(serializers.ModelSerializer):
-    questions = QuestionSerializer(many=True)
+    questions = QuestionSerializer(many=True, read_only=True)
     owner = serializers.ReadOnlyField(source='owner.username')
 
     class Meta:
